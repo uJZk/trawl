@@ -14,9 +14,11 @@ FlareSolverr `/v1`、`/scrape`、`/read` 和 `/extract` 默认使用同一个持
 
 CDP 无身份验证，可控制浏览器和读取登录状态；示例只将宿主机端口绑定到 `127.0.0.1`。同一 Compose 网络内的 RSSHub 可配置 `PLAYWRIGHT_CDP_ENDPOINT=http://trawl:9222`，无需将 CDP 端口开放到公网。CDP 的 `newContext()` 映射到共享上下文，每条 CDP 连接同时支持一个此类别名；关闭别名只清理该连接通过别名创建的页面。与浏览器原生行为一致，`sessionStorage` 按标签页隔离。
 
-浏览器启动项：`CLOAK_HEADLESS`（默认 true）、`CLOAK_HUMANIZE`、`CLOAK_HUMAN_PRESET`（`default` 或 `careful`）、`CLOAK_PROXY`、`CLOAK_PROXY_BYPASS`、`CLOAK_LICENSE_ROUTE`（`auto`、`direct`、`proxy`）。`CLOAK_USER_DATA_DIR` 默认 `/data/cloakbrowser`；`CLOAKBROWSER_CACHE_DIR` 默认 `/data/cloak-cache`。设置 `CLOAK_HEADLESS=false` 且未设置 `DISPLAY` 时，容器通过 Xvfb 启动有界面浏览器。
+浏览器启动项：`CLOAK_HEADLESS`（默认 true）、`CLOAK_HUMANIZE`（默认 true）、`CLOAK_HUMAN_PRESET`（默认 `careful`，也可选 `default`）、`CLOAK_PROXY`、`CLOAK_PROXY_BYPASS`、`CLOAK_LICENSE_ROUTE`（`auto`、`direct`、`proxy`）。`CLOAK_USER_DATA_DIR` 默认 `/data/cloakbrowser`；`CLOAKBROWSER_CACHE_DIR` 默认 `/data/cloak-cache`。设置 `CLOAK_HEADLESS=false` 且未设置 `DISPLAY` 时，容器通过 Xvfb 启动有界面浏览器。
 
-指纹配置留空时由 CloakBrowser 自动生成一致的配置。可按需设置以下变量；对应官方 Chromium 参数，将 `_` 换成 `-`：
+浏览器默认使用容器的系统时区；系统时区是 UTC 时，使用 `America/Los_Angeles`（旧金山，自动处理夏令时）。通过 `CLOAK_FINGERPRINT_TIMEZONE` 或 `CLOAK_EXTRA_ARGS` 显式指定时区时，以指定值为准，包括显式指定的 UTC。Docker 容器不会自动继承宿主机的时区；可设置 `TZ=Asia/Shanghai` 等 IANA 时区，Compose 示例会将 `TZ` 传入容器。
+
+除上述时区规则外，指纹配置留空时由 CloakBrowser 自动生成一致的配置。可按需设置以下变量；对应官方 Chromium 参数，将 `_` 换成 `-`：
 
 - `CLOAK_FINGERPRINT`、`CLOAK_FINGERPRINT_PLATFORM`、`CLOAK_FINGERPRINT_PLATFORM_VERSION`
 - `CLOAK_FINGERPRINT_GPU_VENDOR`、`CLOAK_FINGERPRINT_HARDWARE_CONCURRENCY`、`CLOAK_FINGERPRINT_DEVICE_MEMORY`

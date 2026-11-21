@@ -2,13 +2,35 @@ import { describe, expect, test } from "bun:test"
 import { cloakLaunchOptions } from "../src/cloak-config"
 
 describe("CloakBrowser configuration", () => {
-  test("preserves the SDK's default fingerprint when no overrides are provided", () => {
-    expect(cloakLaunchOptions({})).toEqual({
+  test("defaults to careful humanization and San Francisco when the system uses UTC", () => {
+    expect(cloakLaunchOptions({}, "UTC")).toEqual({
       userDataDir: "/data/cloakbrowser",
       headless: true,
-      humanize: false,
-      args: [],
+      humanize: true,
+      humanPreset: "careful",
+      args: ["--fingerprint-timezone=America/Los_Angeles"],
     })
+  })
+
+  test.each([
+    ["UTC", "America/Los_Angeles"],
+    ["Etc/UTC", "America/Los_Angeles"],
+    ["Etc/GMT+0", "America/Los_Angeles"],
+    ["Asia/Shanghai", "Asia/Shanghai"],
+    ["Europe/London", "Europe/London"],
+  ])("selects the browser time zone for system time zone %s", (system, expected) => {
+    expect(cloakLaunchOptions({}, system).args).toContain(`--fingerprint-timezone=${expected}`)
+  })
+
+  test("honors explicit time zone and humanization overrides", () => {
+    const options = cloakLaunchOptions(
+      { CLOAK_FINGERPRINT_TIMEZONE: "UTC", CLOAK_HUMANIZE: "false", CLOAK_HUMAN_PRESET: "default" },
+      "Asia/Shanghai",
+    )
+    expect(options).toMatchObject({ humanize: false, humanPreset: "default", args: ["--fingerprint-timezone=UTC"] })
+    expect(cloakLaunchOptions({ CLOAK_EXTRA_ARGS: '["--fingerprint-timezone=Asia/Tokyo"]' }, "UTC").args).toEqual([
+      "--fingerprint-timezone=Asia/Tokyo",
+    ])
   })
 
   test("passes fingerprint values and enabled switches as separate arguments", () => {
@@ -43,18 +65,21 @@ describe("CloakBrowser configuration", () => {
   })
 
   test("passes additional switches and a proxy bypass without exposing CDP control arguments", () => {
-    const options = cloakLaunchOptions({
-      CLOAK_PROXY: "http://user:pass@proxy.example:8080",
-      CLOAK_PROXY_BYPASS: "localhost,127.0.0.1",
-      CLOAK_EXTRA_ARGS: '["--fingerprint-max-touch-points=2"]',
-    })
+    const options = cloakLaunchOptions(
+      {
+        CLOAK_PROXY: "http://user:pass@proxy.example:8080",
+        CLOAK_PROXY_BYPASS: "localhost,127.0.0.1",
+        CLOAK_EXTRA_ARGS: '["--fingerprint-max-touch-points=2"]',
+      },
+      "UTC",
+    )
     expect(options.proxy).toEqual({
       server: "http://proxy.example:8080",
       username: "user",
       password: "pass",
       bypass: "localhost,127.0.0.1",
     })
-    expect(options.args).toEqual(["--fingerprint-max-touch-points=2"])
+    expect(options.args).toEqual(["--fingerprint-max-touch-points=2", "--fingerprint-timezone=America/Los_Angeles"])
     expect(() => cloakLaunchOptions({ CLOAK_EXTRA_ARGS: '["--remote-debugging-port=1234"]' })).toThrow()
     expect(() => cloakLaunchOptions({ CLOAK_EXTRA_ARGS: "not-json" })).toThrow()
   })

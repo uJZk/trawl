@@ -2,9 +2,10 @@ import type { LaunchPersistentContextOptions } from "cloakbrowser"
 import { toPlaywrightProxy } from "./proxy"
 
 type Environment = Record<string, string | undefined>
+const UTC_FALLBACK_TIMEZONE = "America/Los_Angeles"
 
-// These are Chromium's native fingerprint switches. An omitted value leaves the
-// SDK's coherent, seed-derived defaults in control.
+// These are Chromium's native fingerprint switches. Except for the time zone,
+// omitted values leave the SDK's coherent, seed-derived defaults in control.
 const fingerprintOptions = {
   CLOAK_FINGERPRINT: "fingerprint",
   CLOAK_FINGERPRINT_PLATFORM: "fingerprint-platform",
@@ -41,7 +42,10 @@ function booleanValue(name: string, value: string | undefined, defaultValue: boo
 }
 
 /** Translate environment variables into options accepted by the official SDK. */
-export function cloakLaunchOptions(env: Environment = process.env): LaunchPersistentContextOptions {
+export function cloakLaunchOptions(
+  env: Environment = process.env,
+  systemTimezone: string | undefined = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): LaunchPersistentContextOptions {
   const args: string[] = []
   for (const [name, flag] of Object.entries(fingerprintOptions)) {
     const value = env[name]?.trim()
@@ -69,17 +73,29 @@ export function cloakLaunchOptions(env: Environment = process.env): LaunchPersis
       throw new Error("CLOAK_EXTRA_ARGS must contain Chromium arguments without CDP or profile overrides")
     args.push(...extra)
   }
-  const preset = env.CLOAK_HUMAN_PRESET?.trim()
+  if (!args.some((arg) => /^--fingerprint-timezone(?:=|$)/.test(arg))) {
+    const timezone = systemTimezone || "UTC"
+    let canonicalTimezone: string
+    try {
+      canonicalTimezone = new Intl.DateTimeFormat("en-US", { timeZone: timezone }).resolvedOptions().timeZone
+    } catch {
+      throw new Error("Unable to resolve the system time zone; set CLOAK_FINGERPRINT_TIMEZONE explicitly")
+    }
+    const utcAlias = /^(?:Etc\/)?(?:UTC|UCT|Universal|Zulu|Greenwich|GMT(?:0|[+-]0{1,2})?)$/i
+    const isUtc = utcAlias.test(timezone) || utcAlias.test(canonicalTimezone)
+    args.push(`--fingerprint-timezone=${isUtc ? UTC_FALLBACK_TIMEZONE : timezone}`)
+  }
+  const preset = env.CLOAK_HUMAN_PRESET?.trim() || "careful"
   const proxy = env.CLOAK_PROXY?.trim()
   const bypass = env.CLOAK_PROXY_BYPASS?.trim()
-  if (preset && preset !== "default" && preset !== "careful") {
+  if (preset !== "default" && preset !== "careful") {
     throw new Error("CLOAK_HUMAN_PRESET must be default or careful")
   }
   return {
     userDataDir: env.CLOAK_USER_DATA_DIR?.trim() || "/data/cloakbrowser",
     headless: booleanValue("CLOAK_HEADLESS", env.CLOAK_HEADLESS, true),
-    humanize: booleanValue("CLOAK_HUMANIZE", env.CLOAK_HUMANIZE, false),
-    ...(preset === "default" || preset === "careful" ? { humanPreset: preset } : {}),
+    humanize: booleanValue("CLOAK_HUMANIZE", env.CLOAK_HUMANIZE, true),
+    humanPreset: preset,
     ...(proxy ? { proxy: bypass ? { ...toPlaywrightProxy(proxy), bypass } : proxy } : {}),
     args,
   }

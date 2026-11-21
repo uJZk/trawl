@@ -18,6 +18,14 @@ describe.skipIf(!binary)("CloakBrowser CDP", () => {
     if (!address || typeof address === "string") throw new Error("Unable to reserve a port")
     const port = address.port
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    const fixture = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () =>
+        new Response("<button onclick='this.textContent=\"clicked\"'>click</button>", {
+          headers: { "content-type": "text/html" },
+        }),
+    })
     const old = {
       binary: process.env.CLOAKBROWSER_BINARY_PATH,
       profile: process.env.CLOAK_USER_DATA_DIR,
@@ -29,6 +37,15 @@ describe.skipIf(!binary)("CloakBrowser CDP", () => {
     try {
       const context = await launchCloakContext(port)
       try {
+        const page = await context.newPage()
+        await page.goto(fixture.url.href)
+        await page.locator("button").click({ timeout: 10_000 })
+        expect(await page.locator("button").textContent()).toBe("clicked")
+        if (process.env.CLOAK_EXPECT_TIMEZONE) {
+          expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(
+            process.env.CLOAK_EXPECT_TIMEZONE,
+          )
+        }
         const remote = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
         try {
           await context.addCookies([{ name: "shared", value: "yes", url: "http://example.com" }])
@@ -42,6 +59,7 @@ describe.skipIf(!binary)("CloakBrowser CDP", () => {
         await context.close()
       }
     } finally {
+      fixture.stop(true)
       for (const [key, value] of Object.entries({
         CLOAKBROWSER_BINARY_PATH: old.binary,
         CLOAK_USER_DATA_DIR: old.profile,

@@ -25,7 +25,7 @@ curl http://127.0.0.1:9222/json/version
 
 ### 镜像环境变量
 
-以下变量可通过 `docker run -e`、Compose 的 `environment` 或 `.env` 设置。留空的指纹参数交给 CloakBrowser 自动生成；部分指纹参数仅由较新的授权版支持。
+以下变量可通过 `docker run -e`、Compose 的 `environment` 或 `.env` 设置。留空的指纹参数通常由 CloakBrowser 自动生成；时区按下表规则选择。部分指纹参数仅由较新的授权版支持。
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -38,8 +38,8 @@ curl http://127.0.0.1:9222/json/version
 | `CLOAK_SINGLE_SESSION` | `true` | 启用共享 CloakBrowser 后端；本镜像未打包旧版 Camoufox，不应关闭。 |
 | `CLOAK_USER_DATA_DIR` | `/data/cloakbrowser` | 持久 profile 目录，保存 cookie、localStorage 和指纹种子。 |
 | `CLOAK_HEADLESS` | `true` | 设为 `false` 使用有界面浏览器；容器无 `DISPLAY` 时自动启动 Xvfb。 |
-| `CLOAK_HUMANIZE` | `false` | 启用官方 SDK 的拟人交互。 |
-| `CLOAK_HUMAN_PRESET` | `default` | 拟人交互预设：`default` 或 `careful`。 |
+| `CLOAK_HUMANIZE` | `true` | 启用官方 SDK 的拟人交互；设为 `false` 可关闭。 |
+| `CLOAK_HUMAN_PRESET` | `careful` | 拟人交互预设：`default` 或 `careful`。 |
 | `CLOAK_PROXY` | 空 | 整个共享浏览器使用的代理 URL。 |
 | `CLOAK_PROXY_BYPASS` | 空 | 逗号分隔的全局代理绕过列表。 |
 | `CLOAK_LICENSE_ROUTE` | `auto` | 授权请求路径：`auto`、`direct` 或 `proxy`。 |
@@ -48,6 +48,7 @@ curl http://127.0.0.1:9222/json/version
 | `PORT` | `8191` | API 监听端口；Compose 示例用它设置宿主机端口。 |
 | `CLOAK_CDP_PORT` | `9222` | CDP 监听端口；Compose 示例使用此值设置宿主机端口，容器内保持 `9222`。 |
 | `CLOAK_CDP_INTERNAL_PORT` | `9223` | Chromium 内部回环 CDP 端口，须与对外 CDP 端口不同。 |
+| `TZ` | 容器系统时区 | 设置容器时区，例如 `Asia/Shanghai`；Compose 会转发该变量。 |
 | `BROWSER_SESSION_TTL_SECONDS` | `3600` | 命名 session 别名的空闲有效期；过期不会清空共享 profile。 |
 | `BROWSER_ACQUIRE_TIMEOUT_MS` | `30000` | 等待共享浏览器可用的最长时间。 |
 | `SCRAPE_MAX_TIMEOUT_MS` | `60000` | 抓取请求的默认总超时。 |
@@ -60,7 +61,7 @@ curl http://127.0.0.1:9222/json/version
 | `CLOAK_FINGERPRINT_GPU_VENDOR` | GPU 厂商，如 `NVIDIA` 或 `Intel`。 |
 | `CLOAK_FINGERPRINT_HARDWARE_CONCURRENCY` / `CLOAK_FINGERPRINT_DEVICE_MEMORY` | CPU 线程数及设备内存。 |
 | `CLOAK_FINGERPRINT_SCREEN_WIDTH` / `CLOAK_FINGERPRINT_SCREEN_HEIGHT` / `CLOAK_FINGERPRINT_TASKBAR_HEIGHT` | 屏幕尺寸和任务栏高度。 |
-| `CLOAK_FINGERPRINT_TIMEZONE` / `CLOAK_FINGERPRINT_LOCALE` | 时区和语言区域。 |
+| `CLOAK_FINGERPRINT_TIMEZONE` / `CLOAK_FINGERPRINT_LOCALE` | 时区和语言区域。时区默认使用容器系统时区；系统为 UTC 时使用 `America/Los_Angeles`。显式设置始终优先。 |
 | `CLOAK_FINGERPRINT_WEBRTC_IP` | WebRTC ICE 候选地址，可使用 IP 或 `auto`。 |
 | `CLOAK_FINGERPRINT_STORAGE_QUOTA` | 存储配额余量，单位 MB。 |
 | `CLOAK_FINGERPRINT_NOISE` / `CLOAK_FINGERPRINT_SAPI_VOICES` | 控制指纹噪声及 Windows 语音列表。 |

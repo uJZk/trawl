@@ -6,6 +6,7 @@ services:
       - "${PORT:-8191}:8191"
       - "127.0.0.1:${CLOAK_CDP_PORT:-9222}:9222"
     environment:
+      - TZ
       - CLOAKBROWSER_LICENSE_KEY
       - CLOAKBROWSER_BINARY_PATH
       - CLOAKBROWSER_CACHE_DIR=${CLOAKBROWSER_CACHE_DIR:-/data/cloak-cache}
