@@ -69,7 +69,7 @@ curl http://127.0.0.1:9222/json/version
 | `CLOAK_FINGERPRINT_TRANSPARENT_PROXY` / `CLOAK_FINGERPRINT_TRANSPARENT_PROXY_DNS` | 透明代理及其 DNS 设置。 |
 | `CLOAK_FINGERPRINT_PORTABLE_COOKIES` | 启用可跨机器复制的 profile cookie。 |
 
-其他通用 API、日志、验证码及 MITM 选项见 [.env.example](.env.example)。其中 Camoufox 浏览器池选项属于旧版运行时；共享模式禁止旧代理池变量 `PROXY_URL`、`PROXY_LIST_FILE`、`RESIDENTIAL_PROXY_URL` 和 `RESIDENTIAL_PROXY_LIST_FILE`，请改用 `CLOAK_PROXY`。
+其他通用 API、日志、验证码及 MITM 选项见 [.env.example](.env.example)；使用 Compose 时，未在示例中列出的变量须添加到 `environment` 才会传入容器。其中 Camoufox 浏览器池选项属于旧版运行时；共享模式禁止旧代理池变量 `PROXY_URL`、`PROXY_LIST_FILE`、`RESIDENTIAL_PROXY_URL` 和 `RESIDENTIAL_PROXY_LIST_FILE`，请改用 `CLOAK_PROXY`。
 
 TRAWL starts with HTTP, reuses verified clearance and opens Camoufox when a browser is needed. Repeat requests fetch fresh content without repeating a full solve whenever the site accepts the saved session.
 
