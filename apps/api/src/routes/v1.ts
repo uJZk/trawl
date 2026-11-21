@@ -85,6 +85,8 @@ export function v1Route({
       const scrapeRequest = buildScrapeRequestFromFlareSolverr(req as FlareSolverrScrapeRequest)
       const deps = orchestratorDeps()
       const scrapeReq = req as FlareSolverrScrapeRequest
+      if (deps.sharedBrowser && scrapeReq.proxy !== undefined)
+        throw new RequestValidationError("Per-request proxies are unavailable with the shared browser", 400)
       const sessionId = scrapeReq.session
       if (sessionId) {
         const sessions = deps.sessions

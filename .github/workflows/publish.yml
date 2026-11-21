@@ -1,21 +1,17 @@
 name: Publish
 
-# Builds `:X.Y.Z` and `:latest` tags of `ghcr.io/.../trawl` from
-# `apps/api/Dockerfile` on `v*` release tag pushes. The `v` prefix is stripped
-# per Docker convention (git tag `v1.0.0` -> docker tag `1.0.0`); `:latest`
-# auto-attaches via the default `latest=auto` flavor of `type=semver`.
-#
-# Compact release images omit the optional Windows/macOS font bundles and use
-# Linux fingerprints only. Users who need the complete fingerprint pool can
-# build it explicitly with `CAMOUFOX_KEEP_SPOOFED_OS_FONTS=1`.
+# Builds versioned `:X.Y.Z` tags of `ghcr.io/.../trawl` from
+# `apps/api/Dockerfile.cloak` on `v*` release tag pushes. The `v` prefix is stripped
+# per Docker convention (git tag `v1.0.0` -> docker tag `1.0.0`).
+# publish-cloak.yml owns the default branch's :latest tag.
 #
 # Lives separately from publish-nightly.yml (dev branch pushes) and
 # publish-baseline.yml (baseline runtime pushes). `v*-baseline` is
 # intentionally excluded so a baseline-only release doesn't also push
-# `:X.Y.Z`/`:latest` - publish-baseline.yml owns that path.
+# `:X.Y.Z` - publish-baseline.yml owns that path.
 #
 # Tag contract:
-#   - push `v*` -> :X.Y.Z + :latest
+#   - push `v*` -> :X.Y.Z
 #   - push `v*-baseline` -> nothing here (excluded)
 #   - branch pushes -> nothing here
 
@@ -23,8 +19,7 @@ on:
   push:
     tags:
       # Release tags - pure semver only. `v*-baseline` is intentionally excluded
-      # so a baseline-only release (e.g., `v1.0.0-baseline`) does NOT push `:X.Y.Z`
-      # or `:latest` from this workflow; publish-baseline.yml owns that path.
+      # so a baseline-only release does not push a standard version tag.
       - "v*"
       - "!v*-baseline"
 
@@ -83,7 +78,7 @@ jobs:
         id: build
         with:
           context: .
-          file: apps/api/Dockerfile
+          file: apps/api/Dockerfile.cloak
           platforms: ${{ matrix.platform }}
           push: true
           labels: ${{ steps.meta.outputs.labels }}
@@ -136,10 +131,10 @@ jobs:
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=false
           tags: |
             # Versioned release tag: git tag v1.0.0 → docker tag 1.0.0 (strips the v prefix,
-            # per Docker convention; type=ref would mirror the v through). type=semver also
-            # auto-attaches :latest via the default latest=auto flavor.
+            # per Docker convention; type=ref would mirror the v through).
             type=semver,pattern={{version}}
 
       - name: Create and push multi-arch manifest

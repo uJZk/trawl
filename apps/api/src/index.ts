@@ -1,6 +1,10 @@
 import { TIER1_TRANSPORT, verifyTier1Transport } from "@trawl/tiers"
 import { createApiApp } from "./app"
+import { startCdpProxy } from "./cdp"
 import {
+  CLOAK_CDP_INTERNAL_PORT,
+  CLOAK_CDP_PORT,
+  CLOAK_SINGLE_SESSION,
   HEADFUL_POOL_SIZE,
   MITM_ALWAYS_SCRAPE,
   MITM_CA_DIR,
@@ -17,7 +21,7 @@ import {
   SHUTDOWN_DRAIN_MS,
   USER_PREFS,
 } from "./config"
-import { getDeps, initPool } from "./deps"
+import { getDefaultCdpContextId, getDeps, initPool } from "./deps"
 import { registerLifecycleHandlers, stopServer } from "./lifecycle"
 import { type MitmProxyHandle, shutdownMitmProxy, startMitmProxy } from "./proxy/server"
 import { startMemoryMonitor } from "./runtimeMemory"
@@ -33,6 +37,9 @@ if (SCRAPE_PROXY_SELECTION !== "failover") console.log(`[api] proxy selection: $
 if (Object.keys(USER_PREFS).length > 0) console.log(`[api] user prefs changed: ${Object.keys(USER_PREFS).join(", ")}`)
 
 const state: { proxyHandle?: MitmProxyHandle } = {}
+const cdp = CLOAK_SINGLE_SESSION
+  ? startCdpProxy(CLOAK_CDP_PORT, CLOAK_CDP_INTERNAL_PORT, getDefaultCdpContextId)
+  : undefined
 const stopMemoryMonitor = startMemoryMonitor(POOL_SIZE, HEADFUL_POOL_SIZE)
 
 const poolReady = initPool()
@@ -46,7 +53,7 @@ if (MITM_ENABLED) {
     caDir: MITM_CA_DIR,
     deps: getDeps(),
     maxTier: MITM_MAX_TIER,
-    alwaysScrape: MITM_ALWAYS_SCRAPE,
+    alwaysScrape: CLOAK_SINGLE_SESSION || MITM_ALWAYS_SCRAPE,
     escalate429: MITM_ESCALATE_429,
     debug: MITM_DEBUG,
   })
@@ -60,6 +67,7 @@ poolReady.catch((err) => {
 registerLifecycleHandlers({
   onShutdown: async () => {
     stopMemoryMonitor()
+    cdp?.stop(true)
     await Promise.all([
       stopServer(app.server, SHUTDOWN_DRAIN_MS),
       state.proxyHandle ? shutdownMitmProxy(state.proxyHandle) : undefined,

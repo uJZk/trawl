@@ -3,7 +3,7 @@ import type { BrowserSession, Cookie, CreateBrowserSession } from "@trawl/types"
 import type { Page } from "patchright"
 import type { AcquireOptions } from "./orchestrator"
 import { toCookies } from "./utils/cookies"
-import { RequestBudget } from "./utils/deadline"
+import { RequestBudget, sleep } from "./utils/deadline"
 import { RequestValidationError } from "./utils/sanitize"
 
 type Context = Awaited<ReturnType<typeof newFreshContext>>
@@ -17,11 +17,14 @@ interface Entry {
   busy: boolean
   releaseRetention?: () => void
   requestReplacement?: (reason: string) => void
+  contextClosed?: () => void
   closing?: Promise<void>
   opening?: Promise<Context>
   sessionStorage: Map<string, [string, string][]>
 }
 interface Options {
+  sharedContext?: boolean
+  sharedHeadful?: boolean
   acquireBrowser(domain: string, budgetMs: number, options: AcquireOptions): Promise<BrowserHandle>
   releaseBrowser(handle: BrowserHandle): void
   maxSessions?: number
@@ -70,6 +73,14 @@ export class BrowserSessions {
   ): Promise<BrowserSession> {
     budget?.check()
     if (this.stopped) throw new RequestValidationError("Session manager is shutting down", 503)
+    if (this.deps.sharedContext && options.publicOnly)
+      throw new RequestValidationError("Public-only sessions are unavailable with the shared browser", 503)
+    if (this.deps.sharedContext && options.proxy)
+      throw new RequestValidationError("Per-session proxies are unavailable with the shared browser", 400)
+    if (this.deps.sharedContext && options.ignoreCertificateErrors)
+      throw new RequestValidationError("Per-session TLS policy is unavailable with the shared browser", 400)
+    if (this.deps.sharedContext && options.headful && !this.deps.sharedHeadful)
+      throw new RequestValidationError("Headful sessions require CLOAK_HEADLESS=false", 400)
     if (options.publicOnly && !this.deps.networkProxy)
       throw new RequestValidationError("Public-only sessions are unavailable", 503)
     const id = options.id ?? crypto.randomUUID()
@@ -99,7 +110,10 @@ export class BrowserSessions {
     }
     if ([...this.closing].some((entry) => entry.info.id === id))
       throw new RequestValidationError("Session is closing; retry after cleanup completes", 409)
-    if (this.entries.size + this.closing.size >= this.maxSessions)
+    const reservedDefault = Boolean(
+      this.deps.sharedContext && id !== "_trawl_shared" && !this.entries.has("_trawl_shared"),
+    )
+    if (this.entries.size + this.closing.size + Number(reservedDefault) >= this.maxSessions)
       throw new RequestValidationError("Browser session limit reached", 429)
     const now = this.now()
     const entry: Entry = {
@@ -140,7 +154,9 @@ export class BrowserSessions {
 
   async list(): Promise<BrowserSession[]> {
     await this.sweep()
-    return [...this.entries.values()].map((entry) => this.info(entry))
+    return [...this.entries.values()]
+      .filter((entry) => !this.deps.sharedContext || entry.info.id !== "_trawl_shared")
+      .map((entry) => this.info(entry))
   }
 
   async ensure(id: string, maxAgeMs?: number, budget?: RequestBudget): Promise<BrowserSession> {
@@ -179,7 +195,13 @@ export class BrowserSessions {
     const result = await this.use(id, "", budget, async (_handle, _context, _storage, page) => {
       if (!page) throw new RequestValidationError("Session page is unavailable", 410)
       // Camoufox isolates ordinary evaluations from the site's globals and functions.
-      return page.evaluate(expression.startsWith("mw:") ? expression : `mw:${expression}`)
+      return page.evaluate(
+        this.deps.sharedContext
+          ? expression.replace(/^mw:/, "")
+          : expression.startsWith("mw:")
+            ? expression
+            : `mw:${expression}`,
+      )
     })
     // Playwright reports a JS undefined as-is; JSON responses carry null instead.
     return result === undefined ? null : result
@@ -204,7 +226,13 @@ export class BrowserSessions {
     const entry = this.require(id)
     if (requirePublicOnly && !entry.options.publicOnly)
       throw new RequestValidationError("MCP requires a publicOnly session; create one through POST /sessions", 400)
-    if (entry.busy) throw new RequestValidationError("Session is busy; retry after its request completes", 409)
+    if (entry.busy && !this.deps.sharedContext)
+      throw new RequestValidationError("Session is busy; retry after its request completes", 409)
+    while (entry.busy) {
+      await sleep(Math.min(25, budget.remaining()), budget.signal)
+      budget.check()
+      if (this.entries.get(id) !== entry) throw new RequestValidationError("Session is no longer available", 410)
+    }
     entry.busy = true
     let handle: BrowserHandle | undefined
     let opening: Promise<Context> | undefined
@@ -236,20 +264,23 @@ export class BrowserSessions {
         entry.requestReplacement = handle.requestBrowserReplacement
         const proxy = entry.options.proxy
         const trustedCa = proxy ? await budget.run(async () => this.deps.trustedProxyCa?.(proxy)) : undefined
-        const pendingContext = newFreshContext(handle.browser, {
-          proxy: entry.options.publicOnly ? await budget.run(async () => this.deps.networkProxy?.(proxy)) : proxy,
-          ignoreHttpsErrors: entry.options.ignoreCertificateErrors || Boolean(trustedCa),
-          requestReplacement: handle.requestBrowserReplacement,
-        })
+        const pendingContext = this.deps.sharedContext
+          ? Promise.resolve(handle.context)
+          : newFreshContext(handle.browser, {
+              proxy: entry.options.publicOnly ? await budget.run(async () => this.deps.networkProxy?.(proxy)) : proxy,
+              ignoreHttpsErrors: entry.options.ignoreCertificateErrors || Boolean(trustedCa),
+              requestReplacement: handle.requestBrowserReplacement,
+            })
         opening = pendingContext
         entry.opening = pendingContext
         entry.context = await budget.run(() => pendingContext)
         entry.browser = handle.browser
         entry.browserId = handle.id
-        entry.context.once?.("close", () => {
+        entry.contextClosed = () => {
           if (this.entries.get(id) === entry) this.entries.delete(id)
           entry.releaseRetention?.()
-        })
+        }
+        entry.context.once?.("close", entry.contextClosed)
       }
       if (this.stopped || this.entries.get(id) !== entry)
         throw new RequestValidationError("Session is no longer available", 410)
@@ -273,7 +304,7 @@ export class BrowserSessions {
       throw error
     } finally {
       const context = entry.context
-      if (context && this.entries.get(id) === entry) {
+      if (context && !this.deps.sharedContext && this.entries.get(id) === entry) {
         let cleanupFailed = false
         await closeTemporaryContext(
           {
@@ -359,21 +390,26 @@ export class BrowserSessions {
   private async remove(entry: Entry, handle?: BrowserHandle, opening?: Promise<Context>): Promise<void> {
     if (this.entries.get(entry.info.id) === entry) this.entries.delete(entry.info.id)
     if (entry.closing) return entry.closing
+    if (this.deps.sharedContext && entry.contextClosed) entry.context?.off?.("close", entry.contextClosed)
     entry.sessionStorage.clear()
     this.closing.add(entry)
     const target = opening ?? entry.opening ?? entry.context
     const replacement = handle?.requestBrowserReplacement ?? entry.requestReplacement
-    const resource = target
-      ? Promise.resolve(target).then((context) => ({
-          close: async () => {
-            try {
-              await context.close()
-            } catch {
-              replacement?.("session context cleanup failed")
-            }
-          },
-        }))
-      : undefined
+    const resource = this.deps.sharedContext
+      ? entry.page
+        ? { close: () => entry.page?.close() }
+        : undefined
+      : target
+        ? Promise.resolve(target).then((context) => ({
+            close: async () => {
+              try {
+                await context.close()
+              } catch {
+                replacement?.("session context cleanup failed")
+              }
+            },
+          }))
+        : undefined
     entry.closing = closeTemporaryContext(resource, replacement, "session context cleanup timed out").finally(() => {
       entry.releaseRetention?.()
       this.closing.delete(entry)

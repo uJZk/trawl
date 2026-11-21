@@ -75,6 +75,30 @@ const readConfig = (overrides: Record<string, string>): ConfigSnapshot => {
 }
 
 describe("environment configuration", () => {
+  test("shared browser refuses proxy settings that it cannot honor", () => {
+    const run = (overrides: Record<string, string>) =>
+      Bun.spawnSync({
+        cmd: [process.execPath, "-e", 'await import("./config.ts")'],
+        cwd: import.meta.dir,
+        env: {
+          ...process.env,
+          CLOAK_SINGLE_SESSION: "true",
+          CLOAK_PROXY: "",
+          SCRAPE_MIN_TIER: "1",
+          PROXY_URL: "",
+          PROXY_LIST_FILE: "",
+          RESIDENTIAL_PROXY_URL: "",
+          RESIDENTIAL_PROXY_LIST_FILE: "",
+          ...overrides,
+        },
+      })
+    expect(run({ SCRAPE_MIN_TIER: "4" }).exitCode).not.toBe(0)
+    const legacy = run({ PROXY_URL: "http://user:secret@proxy.example:1234" })
+    expect(legacy.exitCode).not.toBe(0)
+    expect(legacy.stderr.toString()).not.toContain("secret")
+    expect(run({ SCRAPE_MIN_TIER: "4", CLOAK_PROXY: "http://proxy.example:1234" }).exitCode).toBe(0)
+  })
+
   test("keeps automatic GeoIP unless an IPv4 or IPv6 address is configured", () => {
     expect(readConfig({ BROWSER_GEOIP_IP: "   " }).geoipIp).toBeNull()
     expect(readConfig({ BROWSER_GEOIP_IP: " 1.1.1.1 " }).geoipIp).toBe("1.1.1.1")

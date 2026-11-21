@@ -1,0 +1,9 @@
+# CloakBrowser migration handoff
+
+The default-branch image is built by `.github/workflows/publish-cloak.yml` as `ghcr.io/ujzk/trawl:latest` for Linux amd64 and arm64. The repository's default branch is `dev`. The image uses one persistent CloakBrowser context; `/v1`, native scrape routes and CDP share browser cookies and localStorage. RSSHub-style CDP `newContext()` calls are mapped to that context. The image ships the last public keyless Chromium 146 release; a runtime `CLOAKBROWSER_LICENSE_KEY` selects the SDK's licensed download. Never commit the license key.
+
+Configuration, operation, and known restrictions are recorded in `README.md` and `CLOAKBROWSER.md`. Per-request/session proxies and TLS overrides are rejected, MCP public-only scraping is unavailable in shared mode, and the shared-mode MITM proxy rejects WebSocket forwarding. These remain outstanding compatibility limitations. Existing legacy browser pool and HTTP-tier documentation describes the other runtime.
+
+Verification before release: formatting and workspace type checks passed; the complete local suite reported 1607 passed and 175 skipped after clearing environment-injected proxy variables and allowing the local DNS test a 15-second timeout. Real-browser integration passed with both the keyless Chromium 146 build and Chromium 156 obtained with the supplied key; the SDK identified that key as a free single-session plan. An amd64 image build and local container/CDP checks passed. The arm64 archive checksum was verified; an arm64 runtime was not available locally.
+
+After pushing `dev`, inspect the `Publish CloakBrowser image` workflow until both architecture builds and the manifest publication finish. Confirm that `ghcr.io/ujzk/trawl:latest` resolves to the newly published multi-architecture manifest. If the workflow fails, fix the failure and push a follow-up commit without force-pushing.

@@ -7,6 +7,70 @@
 
 Self-hosted web scraping for applications and AI agents. Get page content through an API or MCP, with built-in handling for supported browser challenges and CAPTCHAs.
 
+This fork publishes a single-session CloakBrowser image on the default branch. For setup, shared-session behavior, RSSHub CDP access, licenses and fingerprint environment variables, see [CloakBrowser 单 session 镜像](CLOAKBROWSER.md). The original Camoufox documentation below describes the legacy runtime.
+
+## CloakBrowser 镜像
+
+默认分支构建 `ghcr.io/ujzk/trawl:latest`，支持 Linux amd64 和 arm64。镜像默认使用最后公开的免密钥版本；设置 `CLOAKBROWSER_LICENSE_KEY` 后，官方 SDK 使用该许可证下载并启动授权版。密钥无需参与镜像构建，请只在运行时提供。免费密钥限制一个并发浏览器 session。
+
+```bash
+docker compose -f docker-compose.cloak.yml up -d
+curl http://127.0.0.1:8191/health
+curl http://127.0.0.1:9222/json/version
+```
+
+例如，可在运行 Compose 前设置 `CLOAKBROWSER_LICENSE_KEY`、`CLOAK_FINGERPRINT` 或 `CLOAK_PROXY`，也可以将这些变量写入 Compose 读取的 `.env` 文件。示例将浏览器数据保存在 Docker 卷中，并仅在宿主机回环地址开放 CDP。同一 Compose 网络中的 RSSHub 可使用 `PLAYWRIGHT_CDP_ENDPOINT=http://trawl:9222`。CDP 没有身份验证，连接者可读取浏览器登录状态并控制页面。
+
+`/v1`、`/scrape`、`/read` 和 `/extract` 共用一个持久浏览器上下文；命名 session 是共享状态的逻辑别名。单请求代理或 TLS 设置会返回错误：请使用 `CLOAK_PROXY` 配置浏览器统一代理。共享模式下 MCP 公网隔离抓取不可用，MITM WebSocket 转发返回 501；CDP 每个连接同时支持一个 `newContext()` 别名。详细行为见 [CloakBrowser 单 session 镜像](CLOAKBROWSER.md)。
+
+### 镜像环境变量
+
+以下变量可通过 `docker run -e`、Compose 的 `environment` 或 `.env` 设置。留空的指纹参数交给 CloakBrowser 自动生成；部分指纹参数仅由较新的授权版支持。
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `CLOAKBROWSER_LICENSE_KEY` | 空 | 免费或付费许可证；非空时使用授权版下载流程。 |
+| `CLOAKBROWSER_BINARY_PATH` | 空 | 使用指定浏览器二进制；优先于自动选择。 |
+| `CLOAKBROWSER_CACHE_DIR` | `/data/cloak-cache` | 授权版二进制缓存目录。 |
+| `CLOAKBROWSER_VERSION` | 空 | 固定授权版浏览器版本；具体可用性取决于许可证。 |
+| `CLOAKBROWSER_RELEASE_CHANNEL` | `stable` | 授权版发布通道，可设为 `preview`。 |
+| `CLOAKBROWSER_AUTO_UPDATE` | `true` | 设为 `false` 时复用已缓存版本。 |
+| `CLOAK_SINGLE_SESSION` | `true` | 启用共享 CloakBrowser 后端；本镜像未打包旧版 Camoufox，不应关闭。 |
+| `CLOAK_USER_DATA_DIR` | `/data/cloakbrowser` | 持久 profile 目录，保存 cookie、localStorage 和指纹种子。 |
+| `CLOAK_HEADLESS` | `true` | 设为 `false` 使用有界面浏览器；容器无 `DISPLAY` 时自动启动 Xvfb。 |
+| `CLOAK_HUMANIZE` | `false` | 启用官方 SDK 的拟人交互。 |
+| `CLOAK_HUMAN_PRESET` | `default` | 拟人交互预设：`default` 或 `careful`。 |
+| `CLOAK_PROXY` | 空 | 整个共享浏览器使用的代理 URL。 |
+| `CLOAK_PROXY_BYPASS` | 空 | 逗号分隔的全局代理绕过列表。 |
+| `CLOAK_LICENSE_ROUTE` | `auto` | 授权请求路径：`auto`、`direct` 或 `proxy`。 |
+| `CLOAK_SESSION_ALIAS_LIMIT` | `1000` | 可创建的命名 session 别名上限。 |
+| `CLOAK_EXTRA_ARGS` | 空 | 额外 Chromium 参数的 JSON 字符串数组；不能覆盖服务管理的 CDP 或 profile 参数。 |
+| `PORT` | `8191` | API 监听端口；Compose 示例用它设置宿主机端口。 |
+| `CLOAK_CDP_PORT` | `9222` | CDP 监听端口；Compose 示例使用此值设置宿主机端口，容器内保持 `9222`。 |
+| `CLOAK_CDP_INTERNAL_PORT` | `9223` | Chromium 内部回环 CDP 端口，须与对外 CDP 端口不同。 |
+| `BROWSER_SESSION_TTL_SECONDS` | `3600` | 命名 session 别名的空闲有效期；过期不会清空共享 profile。 |
+| `BROWSER_ACQUIRE_TIMEOUT_MS` | `30000` | 等待共享浏览器可用的最长时间。 |
+| `SCRAPE_MAX_TIMEOUT_MS` | `60000` | 抓取请求的默认总超时。 |
+| `WAF_DETECTION_ENABLED` | `true` | 是否默认启用 WAF 检测。 |
+
+| 指纹变量 | 控制项 |
+| --- | --- |
+| `CLOAK_FINGERPRINT` | 指纹种子；相同种子生成一致的身份。 |
+| `CLOAK_FINGERPRINT_PLATFORM` / `CLOAK_FINGERPRINT_PLATFORM_VERSION` | 平台及 Client Hints 平台版本。 |
+| `CLOAK_FINGERPRINT_GPU_VENDOR` | GPU 厂商，如 `NVIDIA` 或 `Intel`。 |
+| `CLOAK_FINGERPRINT_HARDWARE_CONCURRENCY` / `CLOAK_FINGERPRINT_DEVICE_MEMORY` | CPU 线程数及设备内存。 |
+| `CLOAK_FINGERPRINT_SCREEN_WIDTH` / `CLOAK_FINGERPRINT_SCREEN_HEIGHT` / `CLOAK_FINGERPRINT_TASKBAR_HEIGHT` | 屏幕尺寸和任务栏高度。 |
+| `CLOAK_FINGERPRINT_TIMEZONE` / `CLOAK_FINGERPRINT_LOCALE` | 时区和语言区域。 |
+| `CLOAK_FINGERPRINT_WEBRTC_IP` | WebRTC ICE 候选地址，可使用 IP 或 `auto`。 |
+| `CLOAK_FINGERPRINT_STORAGE_QUOTA` | 存储配额余量，单位 MB。 |
+| `CLOAK_FINGERPRINT_NOISE` / `CLOAK_FINGERPRINT_SAPI_VOICES` | 控制指纹噪声及 Windows 语音列表。 |
+| `CLOAK_FINGERPRINT_MAX_TOUCH_POINTS` / `CLOAK_FINGERPRINT_SEARCH_ENGINE` | 触控点数及默认搜索引擎。 |
+| `CLOAK_FINGERPRINT_ALLOW_3P_COOKIES` | 启用第三方 cookie，使用 `true` 或 `false`。 |
+| `CLOAK_FINGERPRINT_TRANSPARENT_PROXY` / `CLOAK_FINGERPRINT_TRANSPARENT_PROXY_DNS` | 透明代理及其 DNS 设置。 |
+| `CLOAK_FINGERPRINT_PORTABLE_COOKIES` | 启用可跨机器复制的 profile cookie。 |
+
+其他通用 API、日志、验证码及 MITM 选项见 [.env.example](.env.example)。其中 Camoufox 浏览器池选项属于旧版运行时；共享模式禁止旧代理池变量 `PROXY_URL`、`PROXY_LIST_FILE`、`RESIDENTIAL_PROXY_URL` 和 `RESIDENTIAL_PROXY_LIST_FILE`，请改用 `CLOAK_PROXY`。
+
 TRAWL starts with HTTP, reuses verified clearance and opens Camoufox when a browser is needed. Repeat requests fetch fresh content without repeating a full solve whenever the site accepts the saved session.
 
 `HTTP + supported PoW walls → cached browser session → fresh browser solve → residential proxy`

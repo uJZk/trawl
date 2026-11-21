@@ -42,6 +42,11 @@ export const parseBrowserHardwareConcurrency = (value: string | undefined): numb
 }
 
 export const PORT = integerInRange(process.env.PORT, 8_191, 1, 65_535)
+export const CLOAK_SINGLE_SESSION = /^(1|true|yes)$/i.test(process.env.CLOAK_SINGLE_SESSION ?? "")
+export const CLOAK_CDP_PORT = integerInRange(process.env.CLOAK_CDP_PORT, 9_222, 1, 65_535)
+export const CLOAK_CDP_INTERNAL_PORT = integerInRange(process.env.CLOAK_CDP_INTERNAL_PORT, 9_223, 1, 65_535)
+if (CLOAK_SINGLE_SESSION && CLOAK_CDP_PORT === CLOAK_CDP_INTERNAL_PORT)
+  throw new Error("CLOAK_CDP_PORT and CLOAK_CDP_INTERNAL_PORT must differ")
 export const WAF_DETECTION_ENABLED = !/^(0|false|no)$/i.test(process.env.WAF_DETECTION_ENABLED?.trim() ?? "")
 export const POOL_SIZE = positiveInteger(process.env.BROWSER_POOL_SIZE, 1)
 export const BROWSER_GEOIP_IP = process.env.BROWSER_GEOIP_IP?.trim() || undefined
@@ -53,6 +58,7 @@ if (BROWSER_GEOIP_IP && !isIP(BROWSER_GEOIP_IP)) {
 export const ACQUIRE_TIMEOUT_MS = positiveInteger(process.env.BROWSER_ACQUIRE_TIMEOUT_MS, 30_000)
 export const REDIS_SESSION_TTL_SECONDS = positiveInteger(process.env.REDIS_SESSION_TTL_SECONDS, 3_600)
 export const BROWSER_SESSION_MAX_ENTRIES = positiveInteger(process.env.BROWSER_SESSION_MAX_ENTRIES, 4)
+export const CLOAK_SESSION_ALIAS_LIMIT = integerInRange(process.env.CLOAK_SESSION_ALIAS_LIMIT, 1_000, 1, 100_000)
 export const BROWSER_SESSION_TTL_SECONDS = positiveInteger(process.env.BROWSER_SESSION_TTL_SECONDS, 3_600)
 export const MEMORY_SESSION_CACHE_MAX_ENTRIES = positiveInteger(process.env.MEMORY_SESSION_CACHE_MAX_ENTRIES, 1_000)
 // A failed initial Redis connection must not disable Tier 2 for the process lifetime.
@@ -82,6 +88,18 @@ export const HEADFUL_POOL_SIZE = nonNegativeInteger(process.env.BROWSER_HEADFUL_
 // Deployment-wide lower bound for every scraper entry point. Invalid values fail
 // closed so a typo cannot unexpectedly re-enable a direct Tier 1 request.
 export const SCRAPE_MIN_TIER = parseScrapeMinTier(process.env.SCRAPE_MIN_TIER)
+if (CLOAK_SINGLE_SESSION) {
+  if (
+    ["PROXY_URL", "PROXY_LIST_FILE", "RESIDENTIAL_PROXY_URL", "RESIDENTIAL_PROXY_LIST_FILE"].some((name) =>
+      process.env[name]?.trim(),
+    )
+  ) {
+    throw new Error("Proxy pools cannot be used with the shared browser; configure CLOAK_PROXY instead")
+  }
+  if (SCRAPE_MIN_TIER === 4 && !process.env.CLOAK_PROXY?.trim()) {
+    throw new Error("SCRAPE_MIN_TIER=4 requires CLOAK_PROXY with the shared browser")
+  }
+}
 export const SCRAPE_MAX_TIMEOUT_MS = Number(process.env.SCRAPE_MAX_TIMEOUT_MS?.trim() || 60_000)
 if (!Number.isInteger(SCRAPE_MAX_TIMEOUT_MS) || SCRAPE_MAX_TIMEOUT_MS < 1 || SCRAPE_MAX_TIMEOUT_MS > 2_147_483_647) {
   throw new Error("SCRAPE_MAX_TIMEOUT_MS must be an integer from 1 to 2147483647")

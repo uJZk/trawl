@@ -129,21 +129,22 @@ function observeCloudflare(key: string) {
 /** Camoufox's mw: prefix reaches page scripts without weakening the page CSP. */
 export class CloudflareCapture {
   private readonly key = `__trawl_cf_${crypto.randomUUID().replaceAll("-", "")}`
+  private readonly prefix = /^(1|true|yes)$/i.test(process.env.CLOAK_SINGLE_SESSION ?? "") ? "" : "mw:"
 
   async install(page: Page): Promise<void> {
-    await page.addInitScript(`mw:(${observeCloudflare.toString()})(${JSON.stringify(this.key)})`)
+    await page.addInitScript(`${this.prefix}(${observeCloudflare.toString()})(${JSON.stringify(this.key)})`)
   }
 
   async read(page: Page): Promise<CloudflareRender | null> {
     return page
-      .evaluate<CloudflareRender | null>(`mw:window[${JSON.stringify(this.key)}]?.read() ?? null`)
+      .evaluate<CloudflareRender | null>(`${this.prefix}window[${JSON.stringify(this.key)}]?.read() ?? null`)
       .catch(() => null)
   }
 
   async deliver(page: Page, render: CloudflareRender, token: string): Promise<boolean> {
     return page
       .evaluate<boolean>(
-        `mw:window[${JSON.stringify(this.key)}]?.deliver(${JSON.stringify(render)},${JSON.stringify(token)}) === true`,
+        `${this.prefix}window[${JSON.stringify(this.key)}]?.deliver(${JSON.stringify(render)},${JSON.stringify(token)}) === true`,
       )
       .catch(() => false)
   }

@@ -128,6 +128,21 @@ function fixture(
 }
 
 describe("browser sessions", () => {
+  test("shared aliases reserve space for the internal session and never close the shared context", async () => {
+    const f = fixture()
+    const context = await f.handle.browser.newContext()
+    f.handle.context = context
+    const sessions = new BrowserSessions({ ...f.deps, sharedContext: true, maxSessions: 2 })
+    managers.push(sessions)
+    await sessions.create({ id: "alias" })
+    await expect(sessions.create({ id: "other" })).rejects.toMatchObject({ statusCode: 429 })
+    await sessions.ensure("_trawl_shared")
+    expect((await sessions.list()).map((entry) => entry.id)).toEqual(["alias"])
+    await sessions.destroy("alias")
+    expect(context.closed).toBe(false)
+    expect(context.listenerCount("close")).toBe(1)
+  })
+
   test("public-only sessions require guarded contexts while ordinary routing is preserved", async () => {
     await expect(fixture().sessions.create({ publicOnly: true })).rejects.toThrow("unavailable")
     const upstreams: (string | undefined)[] = []

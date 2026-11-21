@@ -1,3 +1,4 @@
+export { launchCloakContext } from "./cloak-launch"
 export { FINGERPRINT, FINGERPRINT_POOL } from "./fingerprint"
 export { MemorySessionCache } from "./memory-session"
 export type { BrowserHandle } from "./pool"

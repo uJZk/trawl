@@ -1,4 +1,10 @@
-import { BrowserPool, MemorySessionCache, SessionCache, type SessionCacheStore } from "@trawl/browser"
+import {
+  BrowserPool,
+  launchCloakContext,
+  MemorySessionCache,
+  SessionCache,
+  type SessionCacheStore,
+} from "@trawl/browser"
 import {
   type AcquireOptions,
   BrowserSessions,
@@ -7,6 +13,7 @@ import {
   WafDetector,
 } from "@trawl/tiers"
 import type { SessionData } from "@trawl/types"
+import { chromium } from "playwright-core"
 import {
   ACQUIRE_TIMEOUT_MS,
   BROWSER_BLOCK_ADS,
@@ -17,6 +24,9 @@ import {
   BROWSER_MAX_CONTENT_PROCESSES,
   BROWSER_SESSION_MAX_ENTRIES,
   BROWSER_SESSION_TTL_SECONDS,
+  CLOAK_CDP_INTERNAL_PORT,
+  CLOAK_SESSION_ALIAS_LIMIT,
+  CLOAK_SINGLE_SESSION,
   CLOSE_TIMEOUT_MS,
   EXTERNAL_CAPTCHA,
   HEADFUL_POOL_SIZE,
@@ -47,6 +57,7 @@ const state: {
   pool?: BrowserPool
   headfulPool?: BrowserPool
   sessions?: BrowserSessions
+  defaultCdpContextId?: string
 } = {}
 
 const handleOwners = new WeakMap<object, BrowserPool>()
@@ -182,6 +193,7 @@ interface InitPoolOptions {
 
 export const getPool = () => state.pool
 export const getHeadfulPool = () => state.headfulPool
+export const getDefaultCdpContextId = () => state.defaultCdpContextId
 
 const initSessionCache = (): Promise<void> => sessionCacheRecovery?.start() ?? Promise.resolve()
 
@@ -205,12 +217,38 @@ export const initPool = async ({
 }: InitPoolOptions = {}): Promise<void> => {
   const poolState = coldBoot ? "cold" : "warm"
   const pool = createPool({
-    coldBoot,
-    poolSize,
+    coldBoot: CLOAK_SINGLE_SESSION ? false : coldBoot,
+    poolSize: CLOAK_SINGLE_SESSION ? 1 : poolSize,
+    ...(CLOAK_SINGLE_SESSION
+      ? {
+          preservePages: true,
+          browserFactory: async () => {
+            const context = await launchCloakContext(CLOAK_CDP_INTERNAL_PORT)
+            try {
+              const browser = await chromium.connectOverCDP(`http://127.0.0.1:${CLOAK_CDP_INTERNAL_PORT}`)
+              if (context.pages().length === 0) await context.newPage()
+              const session = await browser.newBrowserCDPSession()
+              try {
+                const targets = await session.send("Target.getTargets")
+                state.defaultCdpContextId = targets.targetInfos.find(
+                  (target) => target.type === "page",
+                )?.browserContextId
+                if (!state.defaultCdpContextId) throw new Error("Could not determine the default CDP browser context")
+              } finally {
+                await session.detach()
+              }
+              return { browser, context }
+            } catch (error) {
+              await context.close()
+              throw error
+            }
+          },
+        }
+      : {}),
     acquireTimeoutMs: ACQUIRE_TIMEOUT_MS,
-    recycleAfterTemporaryContexts: RECYCLE_AFTER_TEMPORARY_CONTEXTS,
+    recycleAfterTemporaryContexts: CLOAK_SINGLE_SESSION ? 0 : RECYCLE_AFTER_TEMPORARY_CONTEXTS,
     contentProcesses: BROWSER_MAX_CONTENT_PROCESSES,
-    idleTimeoutMs: BROWSER_IDLE_TIMEOUT_MS,
+    idleTimeoutMs: CLOAK_SINGLE_SESSION ? 0 : BROWSER_IDLE_TIMEOUT_MS,
     blockAds: BROWSER_BLOCK_ADS,
     hardwareConcurrency: BROWSER_HARDWARE_CONCURRENCY,
     geoipIp: BROWSER_GEOIP_IP,
@@ -219,11 +257,11 @@ export const initPool = async ({
     drainTimeoutMs: SHUTDOWN_DRAIN_MS,
     launchTimeoutMs: LAUNCH_TIMEOUT_MS,
     userPrefs: USER_PREFS,
-    memoryUsage: () => readRuntimeMemory(poolSize, headfulPoolSize),
+    memoryUsage: CLOAK_SINGLE_SESSION ? undefined : () => readRuntimeMemory(poolSize, headfulPoolSize),
   })
 
   state.headfulPool = undefined
-  if (headfulPoolSize > 0) {
+  if (!CLOAK_SINGLE_SESSION && headfulPoolSize > 0) {
     state.headfulPool = createPool({
       coldBoot,
       poolSize: headfulPoolSize,
@@ -248,11 +286,15 @@ export const initPool = async ({
   // browser-backed requests can wait in acquire() while capacity warms.
   state.pool = pool
   state.sessions = new BrowserSessions({
+    sharedContext: CLOAK_SINGLE_SESSION,
+    sharedHeadful: /^(0|false|no)$/i.test(process.env.CLOAK_HEADLESS?.trim() ?? ""),
     acquireBrowser: (domain, budgetMs, options) => getDeps().acquireBrowser(domain, budgetMs, options),
     releaseBrowser: (handle) => getDeps().releaseBrowser(handle),
-    maxSessions: BROWSER_SESSION_MAX_ENTRIES,
-    defaultProxy: () => (SCRAPE_MIN_TIER === 4 ? residentialProxyPool : proxyPool)?.next(),
-    requireProxy: SCRAPE_MIN_TIER === 4,
+    maxSessions: CLOAK_SINGLE_SESSION ? CLOAK_SESSION_ALIAS_LIMIT + 1 : BROWSER_SESSION_MAX_ENTRIES,
+    defaultProxy: CLOAK_SINGLE_SESSION
+      ? undefined
+      : () => (SCRAPE_MIN_TIER === 4 ? residentialProxyPool : proxyPool)?.next(),
+    requireProxy: !CLOAK_SINGLE_SESSION && SCRAPE_MIN_TIER === 4,
     trustedProxyCa: localProxyCa,
     ttlMs: BROWSER_SESSION_TTL_SECONDS * 1_000,
     networkProxy: (upstream) => publicEgress.proxyFor(upstream),
@@ -280,8 +322,10 @@ export const getDeps = (): OrchestratorDeps => {
   const p = state.pool
   return {
     sessions: state.sessions,
+    sharedBrowser: CLOAK_SINGLE_SESSION,
+    sharedProxy: CLOAK_SINGLE_SESSION && Boolean(process.env.CLOAK_PROXY?.trim()),
     acquireBrowser: async (d: string, budgetMs?: number, options?: AcquireOptions) => {
-      if (options?.headful) {
+      if (options?.headful && !CLOAK_SINGLE_SESSION) {
         const headful = state.headfulPool
         if (!headful) throw new Error("DataDome requires BROWSER_HEADFUL_POOL_SIZE greater than 0")
         const handle = await headful.acquire(d, budgetMs, options?.signal, options?.browserId)
@@ -314,7 +358,7 @@ export const getDeps = (): OrchestratorDeps => {
     proxyPool,
     residentialProxyPool,
     trustedProxyCa: localProxyCa,
-    minTier: SCRAPE_MIN_TIER,
+    minTier: CLOAK_SINGLE_SESSION ? 3 : SCRAPE_MIN_TIER,
     defaultMaxTimeout: SCRAPE_MAX_TIMEOUT_MS,
     externalCaptcha: EXTERNAL_CAPTCHA,
     detectWaf: (evidence, timeoutMs, signal) => wafDetector.detect(evidence, timeoutMs, signal),

@@ -78,6 +78,8 @@ export interface AcquireOptions {
 
 export interface OrchestratorDeps {
   sessions?: BrowserSessions
+  sharedBrowser?: boolean
+  sharedProxy?: boolean
   acquireBrowser(domain: string, budgetMs?: number, options?: AcquireOptions): Promise<BrowserHandle>
   releaseBrowser(handle: BrowserHandle): void
   loadSession(domain: string): Promise<SessionData | undefined>
@@ -161,6 +163,20 @@ export async function scrape(
   }
   budget.signal.addEventListener("abort", onAbort, { once: true })
   try {
+    if (deps.sharedBrowser) {
+      if (deps.networkProxy)
+        throw new RequestValidationError("Public-only egress is unavailable with the shared browser", 503)
+      if (req.proxy)
+        throw new RequestValidationError("Per-request proxies are unavailable with the shared browser", 400)
+      if (req.ignoreCertificateErrors)
+        throw new RequestValidationError("Per-request TLS policy is unavailable with the shared browser", 400)
+      if (!req.sessionId) {
+        const sessions = deps.sessions
+        if (!sessions) throw new RequestValidationError("Browser sessions are unavailable", 503)
+        await budget.run(() => sessions.ensure("_trawl_shared", undefined, budget))
+        req = { ...req, sessionId: "_trawl_shared" }
+      }
+    }
     const result = await budget.run(() =>
       scrapeWithinBudget(
         req,
@@ -400,6 +416,7 @@ async function scrapeWithinBudget(
       async (handle, context, storage, page) => {
         const sessionCapture = {
           ...capture,
+          sharedContext: deps.sharedBrowser,
           sessionContext: context,
           sessionStorage: storage,
           sessionPage: page,
@@ -447,7 +464,7 @@ async function scrapeWithinBudget(
           sessionCached: false,
           timings,
           totalMs: Date.now() - totalStart,
-          proxyUsed: Boolean(namedSession?.proxy),
+          proxyUsed: Boolean(namedSession?.proxy || deps.sharedProxy),
           captchasSolved: result.captchasSolved,
           captchaDiagnostics: capture.externalCaptcha?.diagnostics(),
           body: result.body,

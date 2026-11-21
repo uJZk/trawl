@@ -65,6 +65,7 @@ async function runBrowserTierTask<T extends 3 | 4>(
   // Fresh contexts isolate ordinary solves; named sessions retain their login state.
   let context: Awaited<ReturnType<typeof newFreshContext>> | undefined
   let openingContext: ReturnType<typeof newFreshContext> | undefined
+  let sharedPage: { close(): Promise<void> } | undefined
 
   const budget = capture.budget
   if (!budget) throw new Error("Browser task requires an operation budget")
@@ -91,10 +92,11 @@ async function runBrowserTierTask<T extends 3 | 4>(
     context = await openingContext
     budget.check()
     if (capture.cookies?.length) {
-      await context.clearCookies()
+      if (!capture.sharedContext) await context.clearCookies()
       await context.addCookies(normalizeInputCookies(capture.cookies, url))
     }
     const page = capture.sessionPage ?? (await context.newPage())
+    if (capture.sharedContext && !capture.sessionPage) sharedPage = page
     const storageRestore =
       !capture.sessionPage && capture.sessionStorage?.size
         ? await restoreSessionStorage(page, capture.sessionStorage)
@@ -338,9 +340,10 @@ async function runBrowserTierTask<T extends 3 | 4>(
             : String(err),
     }
   } finally {
-    if (capture.sessionPage) {
+    if (capture.sessionPage || capture.sharedContext) {
       for (const teardown of pageTeardowns) await Promise.resolve(teardown()).catch(() => {})
     }
+    if (sharedPage) await closeTemporaryContext(sharedPage, undefined, "shared page cleanup timed out")
     // Closing the context closes all of its pages. If Firefox wedges during cleanup,
     // ask the pool to replace this browser as soon as the lease is released.
     await close()

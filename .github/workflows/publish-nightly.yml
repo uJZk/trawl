@@ -8,13 +8,13 @@ name: Publish Nightly
 # publish-baseline.yml (baseline runtime builds on `v*`/`*-baseline` tags)
 # so:
 #   - `v*` tag pushes never trigger a nightly rebuild (release is exclusive)
-#   - branch pushes never trigger an image rebuild
+#   - branch pushes do not trigger this nightly workflow
 #   - each workflow has its own GHA cache scope (no cross-pollution)
 #
 # Tag contract:
 #   - scheduled/manual run -> :nightly-<dev-sha> + :nightly
 #   - `:latest` is intentionally NOT touched here - that's owned by
-#     publish.yml and only moves on `v*` release pushes.
+#     publish-cloak.yml and moves on default-branch pushes.
 
 on:
   schedule:

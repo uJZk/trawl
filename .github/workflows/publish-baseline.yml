@@ -8,7 +8,7 @@ name: Publish Baseline
 #   - workflow_dispatch: run manually from any branch; pick a tag via the input
 #     (default: "baseline") e.g. "baseline", "1.0.0-baseline"
 #   - push of `v*` tags (e.g., `v1.0.1`) -> docker tag derived as `1.0.1-baseline`.
-#     publish.yml handles `:1.0.1`/`:latest` for the same push (it excludes
+#     publish.yml handles `:1.0.1` for the same push (it excludes
 #     `v*-baseline` so this workflow owns the baseline half of every release).
 #     This workflow also moves the rolling `:baseline` pointer.
 #   - push of `v*-baseline` or `*-baseline` tags (e.g., `v1.0.1-baseline`,

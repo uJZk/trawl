@@ -112,6 +112,7 @@ export class BrowserPool {
   private launchTimeoutMs: number
   private healthIntervalMs: number
   private browserFactory?: BrowserFactory
+  private preservePages: boolean
   private userPrefs: Record<string, string | number | boolean>
   private idleTimeoutMs: number
   private coldBoot: boolean
@@ -148,6 +149,7 @@ export class BrowserPool {
     coldBoot = false,
     maxAbandonedLaunches = 3,
     browserFactory,
+    preservePages = false,
     userPrefs = {},
     memoryUsage,
   }: {
@@ -171,6 +173,7 @@ export class BrowserPool {
     coldBoot?: boolean
     maxAbandonedLaunches?: number
     browserFactory?: BrowserFactory
+    preservePages?: boolean
     userPrefs?: Record<string, string | number | boolean>
     memoryUsage?: () => { currentBytes: number | null; limitBytes: number | null; workingSetBytes?: number } | undefined
   }) {
@@ -202,6 +205,7 @@ export class BrowserPool {
     this.coldBoot = coldBoot
     this.maxAbandonedLaunches = maxAbandonedLaunches
     this.browserFactory = browserFactory
+    this.preservePages = preservePages
     this.userPrefs = userPrefs
     this.memoryUsage = memoryUsage
   }
@@ -680,6 +684,11 @@ export class BrowserPool {
     entry.busy = false
     entry.busySince = undefined
     entry.stallAt = undefined
+    if (this.preservePages) {
+      entry.lastUsedAt = Date.now()
+      this.finishRelease(entry)
+      return
+    }
     // Keep the context alive - CF cookies (cf_clearance, __cf_bm) and browser cache
     // accumulate, making subsequent challenges faster. Cookies are domain-scoped.
     let pages: { close: AsyncAction }[] = []

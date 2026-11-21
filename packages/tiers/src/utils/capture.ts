@@ -32,6 +32,7 @@ export interface CaptureOptions extends ResponseCaptureOptions {
   networkProxy?: (upstream?: string) => Promise<string>
   cookies?: InputCookie[]
   sessionContext?: Awaited<ReturnType<typeof import("@trawl/browser").newFreshContext>>
+  sharedContext?: boolean
   sessionStorage?: Map<string, [string, string][]>
   // Kept-page sessions run on their retained page instead of a fresh per-request page.
   // The tier strips per-request instrumentation from it again when the operation ends.

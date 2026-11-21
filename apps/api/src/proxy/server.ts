@@ -224,6 +224,10 @@ function serveRequests(stream: tls.TLSSocket, host: string, opts: MitmProxyOptio
     // browser which handles WS in-page).
     const upgradeValue = (headers.upgrade ?? "").toLowerCase()
     if (upgradeValue.includes("websocket")) {
+      if (opts.deps.sharedBrowser) {
+        writeResponse(stream, 501, Buffer.from("WebSocket proxying is unavailable with the shared browser"))
+        return
+      }
       const target = new URL(`https://${headers.host ?? host}`)
       void proxyWebSocket(stream, method, path, headers, target.hostname, target.port ? Number(target.port) : 443, true)
       return
@@ -630,6 +634,10 @@ async function handlePlainHttp(clientSocket: net.Socket, first: Buffer, opts: Mi
     // and upstream after the 101 Switching Protocols handshake.
     const upgradeValue = (headers.upgrade ?? "").toLowerCase()
     if (upgradeValue.includes("websocket")) {
+      if (opts.deps.sharedBrowser) {
+        writeResponse(clientSocket, 501, Buffer.from("WebSocket proxying is unavailable with the shared browser"))
+        return true
+      }
       try {
         const parsed = new URL(absUrl)
         const isHttps = parsed.protocol === "wss:"
