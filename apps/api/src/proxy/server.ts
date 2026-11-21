@@ -29,7 +29,16 @@ import { responseFromBlockedEvidence, responseFromScrapeResult } from "./respons
 
 const MAX_HEADER_BYTES = 64 * 1024
 
-const challengeCache = new ChallengeCache({ ttlMs: 5 * 60 * 1000 })
+const challengeCaches = new WeakMap<MitmProxyOptions, ChallengeCache>()
+
+function challengeCacheFor(options: MitmProxyOptions): ChallengeCache {
+  let cache = challengeCaches.get(options)
+  if (!cache) {
+    cache = new ChallengeCache({ ttlMs: 5 * 60 * 1000 })
+    challengeCaches.set(options, cache)
+  }
+  return cache
+}
 
 export const shouldBypassTier0 = (alwaysScrape: boolean | undefined, cachedMode: ChallengeMode | undefined): boolean =>
   alwaysScrape === true || cachedMode === "cf"
@@ -54,6 +63,8 @@ export interface MitmProxyHandle {
 }
 
 export function startMitmProxy(opts: MitmProxyOptions): MitmProxyHandle {
+  // Each listener owns its challenge history, even if callers reuse options.
+  opts = { ...opts }
   const ca = new MitmCa(opts.caDir)
 
   // Per-host loopback TLS terminators. We know the target host from the CONNECT line, so
@@ -359,6 +370,7 @@ async function proxyRequest(
 
   // Trust the cache for repeat visits - skip Tier 0 entirely if we recently saw
   // a CF challenge here and jump straight to scrape().
+  const challengeCache = challengeCacheFor(opts)
   const cachedMode = challengeCache.get(domain)
   if (shouldBypassTier0(opts.alwaysScrape, cachedMode)) {
     if (opts.debug && opts.alwaysScrape) console.log(`[proxy] Tier 0 bypassed for ${safeUrl(url)} -> scrape()`)

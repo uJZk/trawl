@@ -58,6 +58,45 @@ function request(port: number, url: string, method = "GET", headers: Record<stri
 }
 
 describe("proxy request lifecycle", () => {
+  test("does not share challenge history between proxy listeners", async () => {
+    const challenge = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("challenge", { status: 403, headers: { "cf-mitigated": "challenge" } }),
+    })
+    const normal = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("direct response", { headers: { "content-type": "text/plain" } }),
+    })
+    let cacheReads = 0
+    try {
+      await withProxy(async (port) => {
+        await request(port, challenge.url.href)
+      })
+      await withProxy(
+        async (port) => {
+          const reply = await request(port, normal.url.href)
+          expect(reply.status).toBe(200)
+          expect(reply.body).toBe("direct response")
+          expect(cacheReads).toBe(0)
+        },
+        {
+          deps: {
+            ...deps,
+            loadSession: async () => {
+              cacheReads++
+              return undefined
+            },
+          },
+        },
+      )
+    } finally {
+      challenge.stop(true)
+      normal.stop(true)
+    }
+  })
+
   test("does not replay a POST after the origin accepted it but returned an invalid response", async () => {
     let commits = 0
     const origin = net.createServer((socket) => {
