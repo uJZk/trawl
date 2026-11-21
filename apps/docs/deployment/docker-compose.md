@@ -163,6 +163,10 @@ option absent from your chosen file under `services.trawl.environment` in a Comp
 Inspect the resolved values with `docker compose config` and see the
 [configuration migration guide](/deployment/configuration-migration) when upgrading.
 
+`LISTEN_IP` controls the host interface for the published API and MITM ports (default
+`0.0.0.0`); set it to `127.0.0.1` to restrict them to the host. It does not change
+the listeners inside the container. The Cloak CDP port is separately bound to loopback.
+
 There are two deliberate routing exceptions. `PORT` changes the published host port while the API
 continues listening on container port `8191`. The Redis-backed variants select their bundled
 `redis` service by default. The minimal variant defaults to the bounded in-memory cache; set

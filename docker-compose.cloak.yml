@@ -3,7 +3,7 @@ services:
     image: ghcr.io/ujzk/trawl:latest
     shm_size: 1gb
     ports:
-      - "${PORT:-8191}:8191"
+      - "${LISTEN_IP:-0.0.0.0}:${PORT:-8191}:8191"
       - "127.0.0.1:${CLOAK_CDP_PORT:-9222}:9222"
     environment:
       - TZ

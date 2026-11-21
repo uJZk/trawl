@@ -6,6 +6,7 @@ import {
   CLOAK_CDP_PORT,
   CLOAK_SINGLE_SESSION,
   HEADFUL_POOL_SIZE,
+  HOST,
   MITM_ALWAYS_SCRAPE,
   MITM_CA_DIR,
   MITM_DEBUG,
@@ -28,9 +29,9 @@ import { startMemoryMonitor } from "./runtimeMemory"
 
 if (SCRAPE_MIN_TIER === 1) await verifyTier1Transport()
 
-const app = createApiApp().listen(PORT)
+const app = createApiApp().listen({ hostname: HOST, port: PORT })
 
-console.log(`[api] TRAWL starting on :${PORT}  (pool: ${POOL_SIZE} browser${POOL_SIZE === 1 ? "" : "s"})`)
+console.log(`[api] TRAWL starting on ${HOST}:${PORT}  (pool: ${POOL_SIZE} browser${POOL_SIZE === 1 ? "" : "s"})`)
 if (SCRAPE_MIN_TIER > 1) console.log(`[api] scraper tier floor: ${SCRAPE_MIN_TIER}`)
 if (SCRAPE_MIN_TIER === 1 && TIER1_TRANSPORT !== "bun") console.log(`[api] Tier 1 transport: ${TIER1_TRANSPORT}`)
 if (SCRAPE_PROXY_SELECTION !== "failover") console.log(`[api] proxy selection: ${SCRAPE_PROXY_SELECTION}`)

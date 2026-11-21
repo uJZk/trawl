@@ -20,6 +20,7 @@ type ConfigSnapshot = {
   closeTimeoutMs: number
   shutdownDrainMs: number
   launchTimeoutMs: number
+  host: string
   port: number
   mitmPort: number
   mitmEscalate429: boolean
@@ -49,6 +50,7 @@ const readConfig = (overrides: Record<string, string>): ConfigSnapshot => {
       closeTimeoutMs: config.CLOSE_TIMEOUT_MS,
       shutdownDrainMs: config.SHUTDOWN_DRAIN_MS,
       launchTimeoutMs: config.LAUNCH_TIMEOUT_MS,
+      host: config.HOST,
       port: config.PORT,
       mitmPort: config.MITM_PORT,
       mitmEscalate429: config.MITM_ESCALATE_429,
@@ -60,6 +62,7 @@ const readConfig = (overrides: Record<string, string>): ConfigSnapshot => {
     cwd: import.meta.dir,
     env: {
       ...process.env,
+      HOST: "",
       MITM_ESCALATE_429: "",
       FLARESOLVERR_COOKIE_FALLBACK: "",
       BROWSER_HARDWARE_CONCURRENCY: "",
@@ -75,6 +78,11 @@ const readConfig = (overrides: Record<string, string>): ConfigSnapshot => {
 }
 
 describe("environment configuration", () => {
+  test("API host defaults to all interfaces and accepts an override", () => {
+    expect(readConfig({}).host).toBe("0.0.0.0")
+    expect(readConfig({ HOST: "127.0.0.1" }).host).toBe("127.0.0.1")
+  })
+
   test("shared browser refuses proxy settings that it cannot honor", () => {
     const run = (overrides: Record<string, string>) =>
       Bun.spawnSync({

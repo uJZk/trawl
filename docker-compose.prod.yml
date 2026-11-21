@@ -15,9 +15,9 @@ services:
     image: ghcr.io/germondai/trawl:latest
     restart: always
     ports:
-      - "${PORT:-8191}:8191"
+      - "${LISTEN_IP:-0.0.0.0}:${PORT:-8191}:8191"
       # MITM proxy (only when MITM_ENABLED=true). CA cert at :8191/proxy-ca.crt
-      - "${MITM_PORT:-8192}:${MITM_PORT:-8192}"
+      - "${LISTEN_IP:-0.0.0.0}:${MITM_PORT:-8192}:${MITM_PORT:-8192}"
     shm_size: 1gb
     environment:
       SESSION_CACHE_DRIVER: ${SESSION_CACHE_DRIVER:-redis}

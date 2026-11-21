@@ -41,6 +41,7 @@ export const parseBrowserHardwareConcurrency = (value: string | undefined): numb
   throw new Error("BROWSER_HARDWARE_CONCURRENCY must be an integer from 1 to 64")
 }
 
+export const HOST = process.env.HOST || "0.0.0.0"
 export const PORT = integerInRange(process.env.PORT, 8_191, 1, 65_535)
 export const CLOAK_SINGLE_SESSION = /^(1|true|yes)$/i.test(process.env.CLOAK_SINGLE_SESSION ?? "")
 export const CLOAK_CDP_PORT = integerInRange(process.env.CLOAK_CDP_PORT, 9_222, 1, 65_535)
