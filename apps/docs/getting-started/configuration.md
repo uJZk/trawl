@@ -1003,12 +1003,13 @@ connectivity, but the destination can still reject that proxy IP during a browse
 
 ### `HOST` and `LISTEN_IP`
 
-`HOST` sets the API bind address when running directly (default `0.0.0.0`). For example,
-`HOST=127.0.0.1` limits the API to loopback. The proxy has its own `MITM_HOST` setting.
+`HOST` sets the API and shared-browser CDP bind address (default `0.0.0.0`). For example,
+`HOST=127.0.0.1` limits both listeners to loopback. The forward proxy has its own `MITM_HOST` setting.
 
 For Docker Compose, set `LISTEN_IP=127.0.0.1` to publish the API and MITM ports only on
 the host loopback interface. Compose keeps the API bound to all interfaces inside the container;
-`HOST` in the host `.env` is not forwarded. The Cloak CDP port remains bound to loopback.
+`HOST` in the host `.env` is not forwarded. The Cloak CDP port is published on the host loopback, but remains reachable by other containers
+on the same Compose network.
 
 ### `PORT`
 

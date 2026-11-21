@@ -12,7 +12,7 @@ curl http://127.0.0.1:9222/json/version
 
 FlareSolverr `/v1`、`/scrape`、`/read` 和 `/extract` 默认使用同一个持久上下文。命名 session 是逻辑别名；删除别名不会清空共享 cookie。`CLOAK_SESSION_ALIAS_LIMIT` 限制别名数，默认 1000。单个浏览器的 API 请求排队执行，CDP 客户端可以同时打开自己的页面。全局代理使用 `CLOAK_PROXY`，`CLOAK_PROXY_BYPASS` 可填写逗号分隔的绕过列表。旧的 `PROXY_URL`、`RESIDENTIAL_PROXY_URL` 及代理列表文件不能与共享模式同时使用；设置它们会阻止启动，避免意外直连。每请求或每 session 的代理及 TLS 策略无法在共享上下文中隔离，会返回错误。MCP 的 public-only 网络隔离也无法与该共享上下文组合，因此共享模式下的 MCP 抓取会拒绝执行。MITM 代理启用时 HTTP 请求走浏览器抓取路径；共享模式下不支持 MITM WebSocket 转发，返回 501。
 
-CDP 无身份验证，可控制浏览器和读取登录状态；示例只将宿主机端口绑定到 `127.0.0.1`。同一 Compose 网络内的 RSSHub 可配置 `PLAYWRIGHT_CDP_ENDPOINT=http://trawl:9222`，无需将 CDP 端口开放到公网。CDP 的 `newContext()` 映射到共享上下文，每条 CDP 连接同时支持一个此类别名；关闭别名只清理该连接通过别名创建的页面。与浏览器原生行为一致，`sessionStorage` 按标签页隔离。
+CDP 无身份验证，可控制浏览器和读取登录状态；直接运行时，`HOST=127.0.0.1` 同时限制 API 和 CDP 的监听地址。Compose 示例只将宿主机 CDP 端口绑定到 `127.0.0.1`，容器内仍监听所有接口，同一网络中的容器可以访问。同一 Compose 网络内的 RSSHub 可配置 `PLAYWRIGHT_CDP_ENDPOINT=http://trawl:9222`，无需将 CDP 端口开放到公网。CDP 的 `newContext()` 映射到共享上下文，每条 CDP 连接同时支持一个此类别名；关闭别名只清理该连接通过别名创建的页面。与浏览器原生行为一致，`sessionStorage` 按标签页隔离。
 
 浏览器启动项：`CLOAK_HEADLESS`（默认 true）、`CLOAK_HUMANIZE`（默认 true）、`CLOAK_HUMAN_PRESET`（默认 `careful`，也可选 `default`）、`CLOAK_PROXY`、`CLOAK_PROXY_BYPASS`、`CLOAK_LICENSE_ROUTE`（`auto`、`direct`、`proxy`）。`CLOAK_USER_DATA_DIR` 默认 `/data/cloakbrowser`；`CLOAKBROWSER_CACHE_DIR` 默认 `/data/cloak-cache`。设置 `CLOAK_HEADLESS=false` 且未设置 `DISPLAY` 时，容器通过 Xvfb 启动有界面浏览器。
 

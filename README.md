@@ -45,7 +45,7 @@ curl http://127.0.0.1:9222/json/version
 | `CLOAK_LICENSE_ROUTE` | `auto` | 授权请求路径：`auto`、`direct` 或 `proxy`。 |
 | `CLOAK_SESSION_ALIAS_LIMIT` | `1000` | 可创建的命名 session 别名上限。 |
 | `CLOAK_EXTRA_ARGS` | 空 | 额外 Chromium 参数的 JSON 字符串数组；不能覆盖服务管理的 CDP 或 profile 参数。 |
-| `HOST` | `0.0.0.0` | 直接运行时 API 的监听地址；容器内保持默认值以便端口映射。 |
+| `HOST` | `0.0.0.0` | API 和共享浏览器 CDP 的监听地址；容器内保持默认值以便端口映射。 |
 | `LISTEN_IP` | `0.0.0.0` | Compose 在宿主机发布 API 和 MITM 端口的监听地址，例如 `127.0.0.1`。 |
 | `PORT` | `8191` | API 监听端口；Compose 示例用它设置宿主机端口。 |
 | `CLOAK_CDP_PORT` | `9222` | CDP 监听端口；Compose 示例使用此值设置宿主机端口，容器内保持 `9222`。 |

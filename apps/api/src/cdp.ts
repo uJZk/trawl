@@ -10,7 +10,12 @@ type Connection = {
 }
 
 /** Expose Chromium's loopback-only CDP endpoint and rewrite discovery URLs. */
-export function startCdpProxy(port: number, internalPort: number, defaultContextId: () => string | undefined) {
+export function startCdpProxy(
+  host: string,
+  port: number,
+  internalPort: number,
+  defaultContextId: () => string | undefined,
+) {
   const closeOwnedPages = (data: Connection) => {
     if (data.upstream?.readyState !== WebSocket.OPEN) return
     for (const targetId of data.targets) {
@@ -20,7 +25,7 @@ export function startCdpProxy(port: number, internalPort: number, defaultContext
   }
   return Bun.serve<Connection>({
     port,
-    hostname: "0.0.0.0",
+    hostname: host,
     async fetch(request, server) {
       const url = new URL(request.url)
       const launch = url.searchParams.get("launch")

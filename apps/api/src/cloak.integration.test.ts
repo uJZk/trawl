@@ -39,6 +39,7 @@ describe.skipIf(!process.env.CLOAK_TEST_BINARY && !process.env.CLOAKBROWSER_LICE
         stderr: "ignore",
         env: {
           ...process.env,
+          HOST: "127.0.0.1",
           PORT: String(port),
           CLOAK_CDP_PORT: String(cdpPort),
           CLOAK_CDP_INTERNAL_PORT: String(internalPort),

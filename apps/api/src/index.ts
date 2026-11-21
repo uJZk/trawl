@@ -39,7 +39,7 @@ if (Object.keys(USER_PREFS).length > 0) console.log(`[api] user prefs changed: $
 
 const state: { proxyHandle?: MitmProxyHandle } = {}
 const cdp = CLOAK_SINGLE_SESSION
-  ? startCdpProxy(CLOAK_CDP_PORT, CLOAK_CDP_INTERNAL_PORT, getDefaultCdpContextId)
+  ? startCdpProxy(HOST, CLOAK_CDP_PORT, CLOAK_CDP_INTERNAL_PORT, getDefaultCdpContextId)
   : undefined
 const stopMemoryMonitor = startMemoryMonitor(POOL_SIZE, HEADFUL_POOL_SIZE)
 
